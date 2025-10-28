@@ -148,6 +148,19 @@ OTP_EXPIRY_MINUTES = 2  # صلاحية الرقم 2 دقائق
 COUNTRIES = {
     "EG": "🇪🇬 Egypt",
     "YE": "🇾🇪 Yemen",
+    "IL": "🇮🇱 Israel",
+    "IR": "🇮🇷 Iran",
+    "RU": "🇷🇺 Russia",
+    "SA": "🇸🇦 Saudi Arabia",
+    "TR": "🇹🇷 Turkey",
+    "US": "🇺🇸 United States",
+    "CN": "🇨🇳 China",
+    "FR": "🇫🇷 France",
+    "DE": "🇩🇪 Germany",
+    "GB": "🇬🇧 United Kingdom",
+    "IT": "🇮🇹 Italy",
+    "IN": "🇮🇳 India",
+    "BR": "🇧🇷 Brazil",
 }
 
 # 🔄 حالة كل دولة (True = ظاهرة / False = مخفية)
