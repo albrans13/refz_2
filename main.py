@@ -525,6 +525,8 @@ def detect_country_and_flag(number: str):
         return "Egypt", "🇪🇬"
     if num.startswith("967"):
         return "Yemen", "🇾🇪"
+    if num.startswith("972"):
+        return "Israel", "🇮🇱"
     return "International", "🌐"
 
 def extract_otp(message: str):
