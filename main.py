@@ -753,7 +753,7 @@ def process_account_once(acc: dict, force_resend=False):
         # 💎 النص النهائي الفخم
         text = (
             f"{frame_top}\n"
-            f"▌<b> {html_lib.escape(flag)} {html_lib.escape(country_guess)}  {html_lib.escape(service.upper())}    ⟡        </b> \n"
+            f"▌<b> {html_lib.escape(flag)} {html_lib.escape(country_guess)}  {html_lib.escape(service.upper())}     ⟡        </b> \n"
             f"{frame_bottom}\n"
             "╔═•◈•══════════════•◈•═╗\n"
             f"║ 📲 <b>Number</b>: <code>{html_lib.escape(mask_number(number))}</code>\n"
@@ -1143,7 +1143,7 @@ def get_country_selection():
         markup.add(InlineKeyboardButton(COUNTRIES[code], callback_data=f"select_{code}"))
 
     return markup
-@bot.message_handler(commands=['start', 'help'])
+@bot.message_handler(commands=['start', 'open'])
 def cmd_start(m):
     # تتبع المستخدم الجديد فور الدخول
     track_user_and_notify_admin(m)
