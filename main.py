@@ -1645,24 +1645,23 @@ def process_all_message(message):
 
     bot.reply_to(message, f"✅ تم إرسال الإذاعة إلى {sent_count} جروبات ومستخدمين.")
 #$#$
-# 📂 إعدادات النسخ الاحتياطي
+# 🌟 إعدادات النسخ الاحتياطي
 BACKUP_DIR = "backups"
 os.makedirs(BACKUP_DIR, exist_ok=True)
 
 BACKUP_INTERVAL = 60 * 60 * 2  # كل ساعتين
-MAX_BACKUPS = 3  # يحتفظ بآخر 3 نسخ فقط
-ADMIN_ID = 8038053114  # ضع هنا ID الأدمن الحقيقي
+MAX_BACKUPS = 3  # الاحتفاظ بآخر 3 نسخ فقط
+ADMIN_ID = 8038053114  # ضع هنا ID الإدمن
 
+# الملفات الأساسية
+USER_FILE = "user_numbers.json"
 
+# 🧹 تنظيف النسخ القديمة
 def cleanup_old_backups():
-    """
-    🧹 حذف النسخ القديمة والاحتفاظ بآخر MAX_BACKUPS فقط
-    """
     backups = sorted(
         [f for f in os.listdir(BACKUP_DIR) if f.endswith(".json")],
         key=lambda x: os.path.getmtime(os.path.join(BACKUP_DIR, x))
     )
-
     if len(backups) > MAX_BACKUPS:
         to_delete = backups[:-MAX_BACKUPS]
         for f in to_delete:
@@ -1672,23 +1671,28 @@ def cleanup_old_backups():
             except Exception as e:
                 print(f"⚠️ فشل حذف {f}: {e}")
 
-
+# 📦 إنشاء نسخة احتياطية
 def create_backup():
-    """
-    📦 إنشاء نسخة احتياطية وحفظها في ملف داخل مجلد backups/
-    """
     try:
         now = datetime.now().strftime("%Y-%m-%d_%H-%M")
         backup_file = os.path.join(BACKUP_DIR, f"backup_{now}.json")
 
+        # تحميل المستخدمين الحاليين
+        try:
+            with open(USER_FILE, "r", encoding="utf-8") as f:
+                users_data = json.load(f)
+        except Exception:
+            users_data = {}
+
         backup_data = {
             "timestamp": datetime.now().isoformat(),
-            "users_count": len(USERS_DB) if "USERS_DB" in globals() else 0,
-            "sent_messages_memory": SENT_MESSAGES_MEMORY,
-            "banned_users": list(BANNED_USERS) if "BANNED_USERS" in globals() else [],
+            "users": users_data,  # ✅ حفظ المستخدمين
+            "users_count": len(users_data),
+            "sent_messages_memory": globals().get("SENT_MESSAGES_MEMORY", []),
+            "banned_users": list(globals().get("BANNED_USERS", [])),
             "settings": {
-                "required_channels": REQUIRED_CHANNELS,
-                "accounts": ACCOUNTS,
+                "required_channels": globals().get("REQUIRED_CHANNELS", []),
+                "accounts": globals().get("ACCOUNTS", []),
             },
         }
 
@@ -1702,11 +1706,8 @@ def create_backup():
         print("❌ خطأ أثناء إنشاء النسخة:", e)
         return None
 
-
+# 🕒 إرسال النسخة للإدمن تلقائيًا
 def send_backup_to_admin():
-    """
-    🕒 كل ساعتين → إنشاء نسخة وإرسالها للإدمن تلقائيًا
-    """
     try:
         backup_path = create_backup()
         if backup_path:
@@ -1721,12 +1722,10 @@ def send_backup_to_admin():
     finally:
         threading.Timer(BACKUP_INTERVAL, send_backup_to_admin).start()
 
-
-# 🚀 تشغيل النسخ التلقائي عند بدء البوت
+# 🚀 بدء النسخ التلقائي بعد 10 ثواني من تشغيل البوت
 threading.Timer(10, send_backup_to_admin).start()
 
-
-# ========== الأوامر اليدوية ==========
+# ========== أوامر يدوية ==========
 @bot.message_handler(commands=["backup"])
 def cmd_backup(message):
     if message.from_user.id != ADMIN_ID:
@@ -1739,7 +1738,6 @@ def cmd_backup(message):
                 f,
                 caption="📦 نسخة احتياطية يدوية تم إنشاؤها الآن."
             )
-
 
 @bot.message_handler(content_types=["document"])
 def handle_backup_upload(message):
@@ -1761,11 +1759,16 @@ def handle_backup_upload(message):
             backup_data = json.load(f)
 
         # 🔁 استرجاع البيانات
-        global SENT_MESSAGES_MEMORY, BANNED_USERS, REQUIRED_CHANNELS, ACCOUNTS
+        global SENT_MESSAGES_MEMORY, BANNED_USERS, REQUIRED_CHANNELS, ACCOUNTS, user_numbers
         SENT_MESSAGES_MEMORY = backup_data.get("sent_messages_memory", [])
         BANNED_USERS = set(backup_data.get("banned_users", []))
         REQUIRED_CHANNELS = backup_data["settings"].get("required_channels", [])
         ACCOUNTS = backup_data["settings"].get("accounts", [])
+        user_numbers = backup_data.get("users", {})  # ✅ استرجاع المستخدمين
+
+        # حفظ المستخدمين في الملف الفعلي
+        with open(USER_FILE, "w", encoding="utf-8") as f:
+            json.dump(user_numbers, f, ensure_ascii=False, indent=2)
 
         bot.reply_to(message, "✅ تم استرجاع النسخة الاحتياطية بنجاح.")
     except Exception as e:
