@@ -125,6 +125,15 @@ QURAN_AYAT = [
     "📖وَهُوَ عَلَىٰ كُلِّ شَيْءٍ قَدِيرٌ — *And He is over all things.* (5:120)",
     "📖حَسْبُنَا اللَّهُ وَنِعْمَ الْوَكِيلُ — *Allah is sufficient for us, and He is the best disposer.* (3:173)"
 ]
+COUNTRIES_PATH = "countries.json"
+
+if os.path.exists(COUNTRIES_PATH):
+    with open(COUNTRIES_PATH, "r", encoding="utf-8") as f:
+        COUNTRIES = json.load(f)
+else:
+    # لو الملف غير موجود نحفظ النسخة الافتراضية
+    with open(COUNTRIES_PATH, "w", encoding="utf-8") as f:
+        json.dump(COUNTRIES, f, ensure_ascii=False, indent=2)
 #ـ
 def html_escape(v):
     import html as html_lib
@@ -152,15 +161,15 @@ COUNTRIES = {
     "IR": "🇮🇷 Iran",
     "RU": "🇷🇺 Russia",
     "SA": "🇸🇦 Saudi Arabia",
-    "TR": "🇹🇷 Turkey",
+    "AF": "🇦🇫Afghanistan",
     "US": "🇺🇸 United States",
-    "CN": "🇨🇳 China",
-    "FR": "🇫🇷 France",
-    "DE": "🇩🇪 Germany",
+    "NE": "🇳🇵 Nepal",
+    "TA": "🇹🇿 Tanzania",
+    "WU": "🇰🇼 Kuwait",
     "GB": "🇬🇧 United Kingdom",
-    "IT": "🇮🇹 Italy",
-    "IN": "🇮🇳 India",
-    "BR": "🇧🇷 Brazil",
+    "IT": "🇺🇿 Uzbekistan",
+    "IN": "🇰🇬 Kyrgyzstan",
+    "BR": "🇲🇷 Mauritania",
 }
 
 # 🔄 حالة كل دولة (True = ظاهرة / False = مخفية)
@@ -183,7 +192,10 @@ def show_admin_panel(chat_id, message_id=None):
         InlineKeyboardButton("📤 رفع الأرقام", callback_data="choose_country_upload"),
         InlineKeyboardButton("🗑️ حذف الأرقام", callback_data="choose_country_delete"),
     )
-    markup.add(InlineKeyboardButton("🌍 إدارة الدول", callback_data="manage_countries"))
+    markup.add(
+        InlineKeyboardButton("🌍 إدارة الدول", callback_data="manage_countries"),
+        InlineKeyboardButton("➕ إضافة دولة جديدة", callback_data="add_new_country")
+    )
 
     text = "🛠️ لوحة التحكم:"
 
@@ -468,7 +480,36 @@ def save_user_numbers(data=None):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 # ==========================
-# 🔢 جلب رقم عشوائي من الدولة
+# 🔢 جلب رقم عشوائي من الدول
+# ➕ إضافة دولة جديدة
+@bot.callback_query_handler(func=lambda call: call.data == "add_new_country")
+def callback_add_new_country(call):
+    msg = bot.send_message(call.message.chat.id, "🌍 أرسل رمز الدولة (مثلاً: EG):")
+    bot.register_next_step_handler(msg, receive_country_code)
+
+def receive_country_code(message):
+    code = message.text.strip().upper()
+    if len(code) > 3 or not code.isalpha():
+        bot.reply_to(message, "⚠️ رمز الدولة غير صالح، يجب أن يكون مثل EG أو SA.")
+        return
+    msg = bot.send_message(message.chat.id, "📛 الآن أرسل اسم الدولة مع العلم (مثلاً: 🇪🇬 Egypt):")
+    bot.register_next_step_handler(msg, lambda m: save_new_country(m, code))
+
+def save_new_country(message, code):
+    name = message.text.strip()
+    if not name:
+        bot.reply_to(message, "⚠️ لم يتم إدخال اسم الدولة.")
+        return
+
+    # حفظها في القاموس العام
+    COUNTRIES[code] = name
+    COUNTRY_VISIBILITY[code] = True
+
+    # حفظ في ملف JSON دائم
+    with open("countries.json", "w", encoding="utf-8") as f:
+        json.dump(COUNTRIES, f, ensure_ascii=False, indent=2)
+
+    bot.send_message(message.chat.id, f"✅ تم إضافة الدولة بنجاح:\n\n{code} → {name}")
 # ==========================
 def get_random_number(code):
     """إرجاع رقم عشوائي من ملف الدولة"""
@@ -838,7 +879,6 @@ def cmd_groups(m):
     for g in groups:
         lines.append(f"- <code>{html_escape(g)}</code>")
     bot.send_message(m.chat.id, "\n".join(lines), parse_mode="HTML")
-
 @bot.message_handler(commands=['groupadd'])
 def cmd_groupadd(m):
     if m.from_user.id != ADMIN_ID:
