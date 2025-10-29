@@ -1,4 +1,3 @@
-
 import os
 import re
 import time
@@ -13,13 +12,13 @@ import telebot
 from telebot import types
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from datetime import datetime, date
-#$#$
 
 # ================== CONFIG ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN") or "8438435636:AAEMBCOsoqaw-JBJ_RuUD_LRilEaKSlKHc0"
-ADMIN_ID = int(os.getenv("ADMIN_ID") or 8038053114)   # ضع هنا رقم اليوزر الخاص بالمشرف (رقم)
-CHAT_IDS = []  
+ADMIN_ID = int(os.getenv("ADMIN_ID") or 8038053114)
 CHANNEL_ID = -1003214839852
+CHAT_IDS = []
+
 # ======== MULTI-ACCOUNT CONFIG ========
 ACCOUNTS = [
     {
@@ -37,14 +36,13 @@ ACCOUNTS = [
 ]
 # ======================================
 
-POLL_INTERVAL = 3      # seconds between monitor polls
+POLL_INTERVAL = 3
 PER_PAGE = 100
 FORCE_RESEND_ON_START = True
+REPLY_MAPPING = {}
 
-# Required channels (for subscription check)
 REQUIRED_CHANNELS = ["@AlBrAnS_OtP", "@OTP_GROUP_ALBRANS"]
 
-# Patterns considered "garbled" that we will rewrite into friendly Arabic message
 GARBLED_PATTERNS = ["CH/", "H'*3'", "#(/'"]
 
 # ================== logging ==================
@@ -57,7 +55,8 @@ logging.getLogger("telebot").setLevel(logging.CRITICAL)
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True)
 session = requests.Session()
 session.headers.update({"User-Agent": "Mozilla/5.0 (compatible)"})
-#$#$
+
+# ================== أدوات التخزين ==================
 def load_json(filename, default=None):
     if not os.path.exists(filename):
         return default
@@ -70,17 +69,23 @@ def load_json(filename, default=None):
 def save_json(filename, data):
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
-#$#$
+
+# ================== ملفات التخزين ==================
 USERS_FILE = "bot_users.json"
-REPLY_MAPPING = {}  # key: admin_message_id, value: user_id
+USER_FILE = "user_numbers.json"
+SENT_MESSAGES_FILE = "sent_messages.json"
+COUNTRIES_FILE = "countries.json"
+COUNTRY_VISIBILITY_FILE = "country_visibility.json"
+NUMBERS_DIR = "numbers"
+os.makedirs(NUMBERS_DIR, exist_ok=True)
+
+# ================== تتبع المستخدمين ==================
 def load_users():
-    return load_json(USERS_FILE, {})  # dict
+    return load_json(USERS_FILE, {})
 
 def save_bot_users(users):
     save_json(USERS_FILE, users)
 
-# ------------------ تتبع المستخدمين ------------------
-# --- تتبع المستخدمين الجدد ---
 def track_user_and_notify_admin(m):
     users = load_users()
     user_id = str(m.from_user.id)
@@ -107,17 +112,20 @@ def track_user_and_notify_admin(m):
         except Exception as e:
             print(f"[ERROR] Failed to notify admin: {e}")
 
-    # كود إعادة التوجيه
+# ================== أدوات عامة ==================
 def mask_number(number: str) -> str:
-    """
-    يخفي 3 أرقام من منتصف الرقم ويظهر آخر 4 أرقام فقط.
-    """
     if len(number) <= 7:
-        # الرقم قصير جدًا، نتركه كما هو
         return number
-    mid = (len(number) - 4) // 2  # نحدد بداية الخفاء بحيث يظهر آخر 4 أرقام
+    mid = (len(number) - 4) // 2
     return number[:mid] + "•••" + number[-4:]
-# Small Quran phrases (kept from your original)
+
+def html_escape(v):
+    try:
+        return html_lib.escape(str(v))
+    except Exception:
+        return html_lib.escape(repr(v))
+
+# ================== الآيات القرآنية ==================
 QURAN_AYAT = [
     "📖إِنَّ مَعَ الْعُسْرِ يُسْرًا — *Verily, with hardship comes ease.* (94:6)",
     "📖اللَّهُ نُورُ السَّمَاوَاتِ وَالْأَرْضِ — *Allah is the Light of the heavens and the earth.* (24:35)",
@@ -125,43 +133,16 @@ QURAN_AYAT = [
     "📖وَهُوَ عَلَىٰ كُلِّ شَيْءٍ قَدِيرٌ — *And He is over all things.* (5:120)",
     "📖حَسْبُنَا اللَّهُ وَنِعْمَ الْوَكِيلُ — *Allah is sufficient for us, and He is the best disposer.* (3:173)"
 ]
-COUNTRIES_PATH = "countries.json"
 
-if os.path.exists(COUNTRIES_PATH):
-    with open(COUNTRIES_PATH, "r", encoding="utf-8") as f:
-        COUNTRIES = json.load(f)
-else:
-    # لو الملف غير موجود نحفظ النسخة الافتراضية
-    with open(COUNTRIES_PATH, "w", encoding="utf-8") as f:
-        json.dump(COUNTRIES, f, ensure_ascii=False, indent=2)
-#ـ
-def html_escape(v):
-    import html as html_lib
-    try:
-        # نحول القيمة أولاً إلى نص قبل تمريرها
-        return html_lib.escape(str(v))
-    except Exception as e:
-        # لو حصل أي خطأ، نحاول بطريقة ثانية آمنة
-        return html_lib.escape(repr(v))
-#@#
-user_numbers = load_users()
-# 📁 مجلد تخزين الملفات
-NUMBERS_DIR = "numbers"
-os.makedirs(NUMBERS_DIR, exist_ok=True)
-USER_FILE = "user_numbers.json"
-SENT_MESSAGES_FILE = "sent_messages.json"
-OTP_EXPIRY_MINUTES = 2  # صلاحية الرقم 2 دقائق
-
-
-# 🌍 الدول
-COUNTRIES = {
+# ================== الدول ==================
+DEFAULT_COUNTRIES = {
     "EG": "🇪🇬 Egypt",
     "YE": "🇾🇪 Yemen",
     "IL": "🇮🇱 Israel",
     "IR": "🇮🇷 Iran",
     "RU": "🇷🇺 Russia",
     "SA": "🇸🇦 Saudi Arabia",
-    "AF": "🇦🇫Afghanistan",
+    "AF": "🇦🇫 Afghanistan",
     "US": "🇺🇸 United States",
     "NE": "🇳🇵 Nepal",
     "TA": "🇹🇿 Tanzania",
@@ -170,128 +151,117 @@ COUNTRIES = {
     "IT": "🇺🇿 Uzbekistan",
     "IN": "🇰🇬 Kyrgyzstan",
     "BR": "🇲🇷 Mauritania",
+    "BA": "🇧🇩 Bangladesh"
 }
 
-# 🔄 حالة كل دولة (True = ظاهرة / False = مخفية)
-COUNTRY_VISIBILITY = {code: True for code in COUNTRIES}
+COUNTRIES = load_json(COUNTRIES_FILE, DEFAULT_COUNTRIES)
+save_json(COUNTRIES_FILE, COUNTRIES)
 
+COUNTRY_VISIBILITY = load_json(COUNTRY_VISIBILITY_FILE, {code: True for code in COUNTRIES})
+save_json(COUNTRY_VISIBILITY_FILE, COUNTRY_VISIBILITY)
 
-# 🧠 أمر دخول المشرف
+# ================== إدارة الدول ==================
+@bot.callback_query_handler(func=lambda call: call.data == "manage_countries")
+def callback_manage_countries(call):
+    markup = InlineKeyboardMarkup(row_width=2)
+    for code, name in COUNTRIES.items():
+        visible = COUNTRY_VISIBILITY.get(code, True)
+        status = "✅ ظاهرة" if visible else "🚫 مخفية"
+        markup.add(InlineKeyboardButton(f"{name} {status}", callback_data=f"toggle_country_{code}"))
+    markup.add(InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_admin"))
+    bot.edit_message_text("🌍 إدارة ظهور الدول:", call.message.chat.id, call.message.message_id, reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("toggle_country_"))
+def callback_toggle_country(call):
+    try:
+        code = call.data.split("_")[-1]
+        COUNTRY_VISIBILITY[code] = not COUNTRY_VISIBILITY.get(code, True)
+        save_json(COUNTRY_VISIBILITY_FILE, COUNTRY_VISIBILITY)
+        bot.answer_callback_query(call.id, "✅ تم التحديث")
+        callback_manage_countries(call)
+    except Exception as e:
+        bot.answer_callback_query(call.id, f"⚠️ خطأ: {e}")
+
+# ================== لوحة التحكم ==================
 @bot.message_handler(commands=["admin"])
 def cmd_admin(message):
-    if str(message.from_user.id) != str(ADMIN_ID):
-        bot.reply_to(message, "❌ لا يمكنك الدخول، هذا الأمر مخصص للمشرف فقط.")
+    if message.from_user.id != ADMIN_ID:
+        bot.reply_to(message, "🚫 هذا الأمر مخصص للمشرف فقط.")
         return
     show_admin_panel(message.chat.id)
 
-
-# ⚙️ لوحة التحكم (تعديل نفس الرسالة عند الرجوع)
 def show_admin_panel(chat_id, message_id=None):
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
         InlineKeyboardButton("📤 رفع الأرقام", callback_data="choose_country_upload"),
-        InlineKeyboardButton("🗑️ حذف الأرقام", callback_data="choose_country_delete"),
+        InlineKeyboardButton("🗑️ حذف الأرقام", callback_data="choose_country_delete")
     )
     markup.add(
         InlineKeyboardButton("🌍 إدارة الدول", callback_data="manage_countries"),
         InlineKeyboardButton("➕ إضافة دولة جديدة", callback_data="add_new_country")
     )
-
     text = "🛠️ لوحة التحكم:"
-
     if message_id:
         bot.edit_message_text(text, chat_id, message_id, reply_markup=markup)
     else:
         bot.send_message(chat_id, text, reply_markup=markup)
 
-
-# 🧩 اختيار الدولة قبل الرفع أو الحذف
-@bot.callback_query_handler(func=lambda call: call.data in ["choose_country_upload", "choose_country_delete"])
-def choose_country_action(call):
-    action = "upload" if call.data == "choose_country_upload" else "delete"
-    markup = InlineKeyboardMarkup(row_width=2)
-
-    for code, name in COUNTRIES.items():
-        if COUNTRY_VISIBILITY[code]:
-            markup.add(InlineKeyboardButton(name, callback_data=f"{action}_{code}"))
-
-    markup.add(InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_admin"))
-    text = "📤 اختر الدولة لرفع الأرقام:" if action == "upload" else "🗑️ اختر الدولة لحذف الأرقام:"
-    bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
-
-
-# 📦 رفع أو حذف ملفات الدولة
-@bot.callback_query_handler(func=lambda call: call.data.startswith(("upload_", "delete_")))
-def handle_country_file_action(call):
-    action, code = call.data.split("_", 1)
-    country_name = COUNTRIES.get(code, "غير معروف")
-
-    if action == "upload":
-        bot.send_message(call.message.chat.id, f"📤 أرسل الآن ملف أرقام الدولة {country_name} (txt فقط)")
-        bot.register_next_step_handler(call.message, lambda msg: receive_numbers_file(msg, code))
-    else:
-        path = os.path.join(NUMBERS_DIR, f"{code}.txt")
-        if os.path.exists(path):
-            os.remove(path)
-            bot.send_message(call.message.chat.id, f"🗑️ تم حذف أرقام {country_name} بنجاح ✅")
-        else:
-            bot.send_message(call.message.chat.id, f"⚠️ لا يوجد ملف أرقام لـ {country_name}.")
-
-
-# 📂 استقبال ملف الأرقام
-def receive_numbers_file(message, code):
-    if not message.document:
-        bot.reply_to(message, "❌ من فضلك أرسل ملف نصي (txt).")
-        return
-
-    if not message.document.file_name.lower().endswith(".txt"):
-        bot.reply_to(message, "⚠️ الملف يجب أن يكون بصيغة txt فقط.")
-        return
-
-    try:
-        file_info = bot.get_file(message.document.file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
-        path = os.path.join(NUMBERS_DIR, f"{code}.txt")
-
-        with open(path, "wb") as f:
-            f.write(downloaded_file)
-
-        country_name = COUNTRIES.get(code, code)
-        bot.send_message(message.chat.id, f"✅ تم رفع أرقام {country_name} بنجاح!")
-
-    except Exception as e:
-        bot.reply_to(message, f"❌ حدث خطأ أثناء حفظ الملف:\n{e}")
-
-
-# 🌍 إدارة ظهور الدول
-@bot.callback_query_handler(func=lambda call: call.data == "manage_countries")
-def callback_manage_countries(call):
-    markup = InlineKeyboardMarkup(row_width=2)
-    for code, name in COUNTRIES.items():
-        status = "✅ ظاهرة" if COUNTRY_VISIBILITY[code] else "🚫 مخفية"
-        markup.add(InlineKeyboardButton(f"{name} {status}", callback_data=f"toggle_country_{code}"))
-
-    markup.add(InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_admin"))
-    bot.edit_message_text("🌍 إدارة ظهور الدول:", call.message.chat.id, call.message.message_id, reply_markup=markup)
-
-
-# 🔁 تبديل حالة الدولة (إظهار / إخفاء)
-@bot.callback_query_handler(func=lambda call: call.data.startswith("toggle_country_"))
-def callback_toggle_country(call):
-    code = call.data.split("_")[-1]
-    COUNTRY_VISIBILITY[code] = not COUNTRY_VISIBILITY[code]
-    status = "✅ تم إظهار الدولة" if COUNTRY_VISIBILITY[code] else "🚫 تم إخفاء الدولة"
-    bot.answer_callback_query(call.id, status)
-    callback_manage_countries(call)
-
-
-# ⬅️ الرجوع إلى لوحة المشرف (يعدل نفس الرسالة)
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_admin")
 def callback_back_to_admin(call):
     show_admin_panel(call.message.chat.id, call.message.message_id)
     bot.answer_callback_query(call.id, "↩️ تم الرجوع إلى لوحة التحكم")
-#$#$
+
+# ================== رفع / حذف الأرقام ==================
+@bot.callback_query_handler(func=lambda call: call.data in ["choose_country_upload", "choose_country_delete"])
+def choose_country_action(call):
+    action = "upload" if call.data == "choose_country_upload" else "delete"
+    markup = InlineKeyboardMarkup(row_width=2)
+    for code, name in COUNTRIES.items():
+        if COUNTRY_VISIBILITY.get(code, True):
+            markup.add(InlineKeyboardButton(name, callback_data=f"{action}_{code}"))
+    markup.add(InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_admin"))
+    text = "📤 اختر الدولة لرفع الأرقام:" if action == "upload" else "🗑️ اختر الدولة لحذف الأرقام:"
+    bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith(("upload_", "delete_")))
+def handle_country_file_action(call):
+    try:
+        action, code = call.data.split("_", 1)
+        country_name = COUNTRIES.get(code, "غير معروف")
+        if action == "upload":
+            bot.send_message(call.message.chat.id, f"📤 أرسل الآن ملف أرقام الدولة {country_name} (txt فقط)")
+            bot.register_next_step_handler(call.message, lambda msg: receive_numbers_file(msg, code))
+        else:
+            path = os.path.join(NUMBERS_DIR, f"{code}.txt")
+            if os.path.exists(path):
+                os.remove(path)
+                bot.send_message(call.message.chat.id, f"🗑️ تم حذف أرقام {country_name} بنجاح ✅")
+            else:
+                bot.send_message(call.message.chat.id, f"⚠️ لا يوجد ملف أرقام لـ {country_name}.")
+    except Exception as e:
+        bot.send_message(call.message.chat.id, f"❌ حدث خطأ أثناء تنفيذ العملية:\n{e}")
+
+def receive_numbers_file(message, code):
+    if not message.document:
+        bot.reply_to(message, "❌ من فضلك أرسل ملف نصي بصيغة txt فقط.")
+        return
+    if not message.document.file_name.lower().endswith(".txt"):
+        bot.reply_to(message, "⚠️ الملف يجب أن يكون بصيغة txt فقط.")
+        return
+    try:
+        file_info = bot.get_file(message.document.file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        path = os.path.join(NUMBERS_DIR, f"{code}.txt")
+        with open(path, "wb") as f:
+            f.write(downloaded_file)
+        country_name = COUNTRIES.get(code, code)
+        bot.send_message(message.chat.id, f"✅ تم رفع أرقام {country_name} بنجاح!")
+    except Exception as e:
+        bot.reply_to(message, f"❌ حدث خطأ أثناء حفظ الملف:\n{e}")
+
+# ================== تحميل الذاكرة ==================
 SENT_MESSAGES_MEMORY = load_json(SENT_MESSAGES_FILE, [])
+save_json(SENT_MESSAGES_FILE, SENT_MESSAGES_MEMORY)
 #$#$
 def progress_bar(percent: int, width: int = 12) -> str:
     """🔹 شريط تقدم أنيق ومضغوط"""
@@ -487,6 +457,7 @@ def callback_add_new_country(call):
     msg = bot.send_message(call.message.chat.id, "🌍 أرسل رمز الدولة (مثلاً: EG):")
     bot.register_next_step_handler(msg, receive_country_code)
 
+
 def receive_country_code(message):
     code = message.text.strip().upper()
     if len(code) > 3 or not code.isalpha():
@@ -495,21 +466,33 @@ def receive_country_code(message):
     msg = bot.send_message(message.chat.id, "📛 الآن أرسل اسم الدولة مع العلم (مثلاً: 🇪🇬 Egypt):")
     bot.register_next_step_handler(msg, lambda m: save_new_country(m, code))
 
+
 def save_new_country(message, code):
     name = message.text.strip()
     if not name:
         bot.reply_to(message, "⚠️ لم يتم إدخال اسم الدولة.")
         return
 
-    # حفظها في القاموس العام
+    # ✅ حفظها في القاموس العام
     COUNTRIES[code] = name
     COUNTRY_VISIBILITY[code] = True
 
-    # حفظ في ملف JSON دائم
+    # 💾 حفظ في ملفات JSON
     with open("countries.json", "w", encoding="utf-8") as f:
         json.dump(COUNTRIES, f, ensure_ascii=False, indent=2)
 
-    bot.send_message(message.chat.id, f"✅ تم إضافة الدولة بنجاح:\n\n{code} → {name}")
+    save_json("country_visibility.json", COUNTRY_VISIBILITY)
+
+    # 🎛️ بعد الحفظ، نعرض زر الرجوع
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("⬅️ رجوع إلى لوحة التحكم", callback_data="back_to_admin"))
+
+    bot.send_message(
+        message.chat.id,
+        f"✅ تم إضافة الدولة بنجاح:\n\n{code} → {name}",
+        reply_markup=markup
+    )
+    
 # ==========================
 def get_random_number(code):
     """إرجاع رقم عشوائي من ملف الدولة"""
@@ -536,7 +519,7 @@ def remove_number_from_file(code, number):
         f.write("\n".join(numbers))
 
 def html_escape(text):
-    return html.escape(text)
+    return html.escape(str(text))
 #$$
 # ========== decoding and helpers ==========
 def basic_auth_header(username, password):
@@ -562,13 +545,78 @@ def decode_short_message(raw: str) -> str:
 
 def detect_country_and_flag(number: str):
     num = re.sub(r"\D", "", number or "")
+    
     if num.startswith("20"):
         return "Egypt", "🇪🇬"
+    if num.startswith("977"):
+        return "Nepal", "🇳🇵"
+    if num.startswith("93"):
+        return "Afghanistan", "🇦🇫"
+    if num.startswith("7"):
+        return "Russia", "🇷🇺"
     if num.startswith("967"):
         return "Yemen", "🇾🇪"
+    if num.startswith("98"):
+        return "Iran", "🇮🇷"
     if num.startswith("972"):
         return "Israel", "🇮🇱"
+    if num.startswith("1"):
+        return "USA/Canada", "🇺🇸"
+    if num.startswith("44"):
+        return "United Kingdom", "🇬🇧"
+    if num.startswith("91"):
+        return "India", "🇮🇳"
+    if num.startswith("966"):
+        return "Saudi Arabia", "🇸🇦"
+    if num.startswith("971"):
+        return "United Arab Emirates", "🇦🇪"
+    if num.startswith("964"):
+        return "Iraq", "🇮🇶"
+    if num.startswith("218"):
+        return "Libya", "🇱🇾"
+    if num.startswith("249"):
+        return "Sudan", "🇸🇩"
+    if num.startswith("212"):
+        return "Morocco", "🇲🇦"
+    if num.startswith("213"):
+        return "Algeria", "🇩🇿"
+    if num.startswith("962"):
+        return "Jordan", "🇯🇴"
+    if num.startswith("961"):
+        return "Lebanon", "🇱🇧"
+    if num.startswith("970"):
+        return "Palestine", "🇵🇸"
+    if num.startswith("92"):
+        return "Pakistan", "🇵🇰"
+    if num.startswith("880"):
+        return "Bangladesh", "🇧🇩"
+    if num.startswith("998"):
+        return "Uzbekistan", "🇺🇿"
+    if num.startswith("996"):
+        return "Kyrgyzstan", "🇰🇬"
+    if num.startswith("55"):
+        return "Brazil", "🇧🇷"
+    if num.startswith("49"):
+        return "Germany", "🇩🇪"
+    if num.startswith("39"):
+        return "Italy", "🇮🇹"
+    if num.startswith("81"):
+        return "Japan", "🇯🇵"
+    if num.startswith("86"):
+        return "China", "🇨🇳"
+    if num.startswith("62"):
+        return "Indonesia", "🇮🇩"
+    if num.startswith("63"):
+        return "Philippines", "🇵🇭"
+    if num.startswith("60"):
+        return "Malaysia", "🇲🇾"
+    if num.startswith("94"):
+        return "Sri Lanka", "🇱🇰"
+    if num.startswith("27"):
+        return "South Africa", "🇿🇦"
+
     return "International", "🌐"
+
 
 def extract_otp(message: str):
     if not message:
@@ -691,12 +739,12 @@ def process_account_once(acc: dict, force_resend=False):
 
         if msg_len < 80:
             level = "compact"
-            frame_top = "▛▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▜"
-            frame_bottom = "▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟"
+            frame_top = "▛▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▜"
+            frame_bottom = "▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟"
         elif msg_len < 300:
             level = "standard"
-            frame_top = "▛▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▜"
-            frame_bottom = "▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟"
+            frame_top = "▛▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▜"
+            frame_bottom = "▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟"
         else:
             level = "minimal"
             frame_top = "╭────────────────────────────╮"
@@ -705,18 +753,18 @@ def process_account_once(acc: dict, force_resend=False):
         # 💎 النص النهائي الفخم
         text = (
             f"{frame_top}\n"
-            f"▌<b> New {html_lib.escape(flag)} {html_lib.escape(country_guess)}  {html_lib.escape(service.upper())}   ⟡        </b> \n"
+            f"▌<b> {html_lib.escape(flag)} {html_lib.escape(country_guess)}  {html_lib.escape(service.upper())}    ⟡        </b> \n"
             f"{frame_bottom}\n"
-            "╔═•◈•════════════════•◈•═╗\n"
+            "╔═•◈•══════════════•◈•═╗\n"
             f"║ 📲 <b>Number</b>: <code>{html_lib.escape(mask_number(number))}</code>\n"
             f"║ 🔐 <b>Code</b>: <code>{html_lib.escape(otp)}</code>\n"
             f"║ 🌍 <b>Country</b>: <b>{html_lib.escape(flag)} {html_lib.escape(country_guess)}</b>\n"
             f"║ 🛰️ <b>Service</b>:<b>{html_lib.escape(service)}</b>\n"
             f"║⏱️ <b>Time</b>: <code>{html_lib.escape(date_str)}</code>\n"
             f"║ <b>💌 Full Message:</b>\n"
-            "╚═•◈•════════════════•◈•═╝\n"
+            "╚═•◈•══════════════•◈•═╝\n"
             f"<pre><code>{safe_message}</code></pre>\n"
-            "•◈•════════════════════•◈•\n"
+            "•◈•══════════════════•◈•\n"
         )
         # إرسال لجميع الجروبات
         sent_to = []
@@ -792,6 +840,9 @@ def monitor_loop():
 def html_escape(v):
     return html_lib.escape(str(v))
 
+# -------------------------
+# help / admin info (fix: don't escape whole help text)
+# -------------------------
 @bot.message_handler(commands=['albrans'])
 def cmd_albrans(m):
     if m.from_user.id != ADMIN_ID:
@@ -803,15 +854,16 @@ def cmd_albrans(m):
         "/on - بدء مراقبة الرسائل\n"
         "/off - إيقاف مراقبة الرسائل\n"
         "/status - عرض حالة المراقبة الحالية\n"
-        "/groupadd <group_id> - إضافة مجموعة جديدة لتحويل الرسائل\n"
+        "/admin - عرض لوحه الادمن\n"
+        "/groupadd &lt;group_id&gt; - إضافة مجموعة جديدة لتحويل الرسائل\n"
         "/groups - عرض قائمة المجموعات\n"
-        "/groupdel <group_id> - حذف مجموعة من التحويل\n"
-        "/ban <user_id> - حظر مستخدم من استخدام البوت\n"
-        "/unban <user_id> - فك الحظر\n"
+        "/groupdel &lt;group_id&gt; - حذف مجموعة من التحويل\n"
+        "/ban  &lt;user_id&gt; - حظر مستخدم من استخدام البوت\n"
+        "/unban &lt;user_id&gt; - فك الحظر\n"
         "/banned - عرض قائمة المحظورين\n"
     )
-    # لا نعمل html_escape هنا لنتيح الوسوم الموجودة (نستخدم parse_mode HTML)
-    bot.send_message(m.chat.id, html_escape(text), parse_mode="HTML")
+    # نرسل النص كما هو مع parse_mode HTML (لا نعمل escape هنا)
+    bot.send_message(m.chat.id, text, parse_mode="HTML")
 
 @bot.message_handler(commands=['on'])
 def cmd_on(m):
@@ -821,7 +873,7 @@ def cmd_on(m):
     cfg = load_config()
     cfg["monitoring_active"] = True
     save_config(cfg)
-    bot.reply_to(m, "✅ تم تفعيل المراقبة.", parse_mode="HTML")
+    bot.reply_to(m, "✅ تم تفعيل البوت الآن.", parse_mode="HTML")
     for gid in load_groups():
         try:
             bot.send_message(gid, "✅ <b>تم تفعيل البوت من قبل الإدارة.</b>", parse_mode="HTML")
@@ -857,7 +909,7 @@ def cmd_status(m):
 
     txt = "📊 <b>حالة البوت</b>\n\n"
     txt += f"🔄 <b>المراقبة:</b> {'مفعّلة' if cfg.get('monitoring_active', True) else 'متوقفة'}\n"
-    txt += f"📅 <b>التاريخ الحالي:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+    txt += f"📅 <b>التاريخ الحالي:</b> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
     txt += f"📱 <b>عدد الرسائل اليوم:</b> {stats.get('today_sms_count', 0)}\n"
     txt += f"📊 <b>إجمالي الرسائل:</b> {stats.get('total_sms_sent', 0)}\n"
     txt += f"👥 <b>عدد المجموعات:</b> {len(groups)}\n"
@@ -866,18 +918,29 @@ def cmd_status(m):
 
     bot.send_message(m.chat.id, txt, parse_mode="HTML")
 
+# -------------------------
+# list groups (عرض بطريقة آمنة)
+# -------------------------
 @bot.message_handler(commands=['groups'])
 def cmd_groups(m):
     if m.from_user.id != ADMIN_ID:
         bot.reply_to(m, "⛔ مخصص للمشرف فقط.")
         return
-    groups = load_groups()
+    groups = load_groups()  # توقع أن العناصر أعداد (ints) أو نصوص رقمية
     if not groups:
         bot.reply_to(m, "📂 لا توجد مجموعات محفوظة.", parse_mode="HTML")
         return
+
     lines = ["📂 <b>قائمة المجموعات:</b>"]
-    for g in groups:
-        lines.append(f"- <code>{html_escape(g)}</code>")
+    for g in sorted(groups, key=lambda x: int(x)):
+        # حاول جلب اسم القناة/المجموعة إن أمكن
+        try:
+            info = bot.get_chat(int(g))
+            title = info.title or str(g)
+        except Exception:
+            title = str(g)
+        lines.append(f"- <code>{html_escape(title)}</code> · <code>{html_escape(g)}</code>")
+
     bot.send_message(m.chat.id, "\n".join(lines), parse_mode="HTML")
 @bot.message_handler(commands=['groupadd'])
 def cmd_groupadd(m):
@@ -1113,7 +1176,7 @@ def cmd_start(m):
 # ============================================================
 
 def html_escape(text):
-    return html.escape(text)
+    return html.escape(str(text))
 
 def get_random_number(code):
     """إرجاع رقم عشوائي من ملف الدولة"""
@@ -1238,6 +1301,19 @@ def change_country(call):
 
 # =============================
 # ===============================
+@bot.message_handler(commands=['help'])
+def cmd_help(m):
+    # إنشاء زر التواصل مع الدعم
+    markup = types.InlineKeyboardMarkup()
+    btn = types.InlineKeyboardButton("📩 تواصل مع الدعم الآن", callback_data="contact_dev")
+    markup.add(btn)
+
+    text = (
+        "🤖 <b>مرحبًا بك!</b>\n\n"
+        "إذا واجهت أي مشكلة أو تحتاج مساعدة، يمكنك التواصل مع فريق الدعم الفني عبر الزر أدناه 👇"
+    )
+
+    bot.send_message(m.chat.id, text, parse_mode="HTML", reply_markup=markup)
 # 📨 مراقبة رسائل الجروب / القناة
 # ===============================
 @bot.message_handler(func=lambda message: message.chat.id == CHANNEL_ID)
@@ -1291,7 +1367,6 @@ def handle_channel_message(message):
         # رسالة للمشرف مع رابط تيليجرام
         admin_msg = (
             f"👤 المستخدم: <a href='tg://openmessage?user_id={found_user}'>{html_lib.escape(display_name)}</a>\n"
-            f"🛰️ الخدمة: {service}\n"
             f"☎️ الرقم: <code>{full_number}</code>\n"
             f"🔐 الكود: <code>{code}</code>\n"
             f"⏱️ الوقت: {now}"
@@ -1376,7 +1451,7 @@ def forward_to_admin(msg):
     try:
         sent_msg = bot.send_message(ADMIN_ID, info, parse_mode="HTML")
         REPLY_MAPPING[sent_msg.message_id] = user.id
-        bot.send_message(msg.chat.id, "✅ تم إرسال رسالتك للمطوّر. سيتواصل معك قريباً.")
+        #$#$
     except Exception as e:
         logger.error("Failed to forward user msg: %s", e)
 
@@ -1407,11 +1482,12 @@ def admin_reply(m):
         bot.reply_to(m, "⚠️ لا يمكن تحديد المستخدم المرتبط بهذه الرسالة.")
 
 # ================== Search handler (number lookup) ==================
-@bot.message_handler(func=lambda m: isinstance(m.text, str) and re.fullmatch(r"\+?\d{7,}", m.text.strip()))
+@bot.message_handler(func=lambda m: isinstance(m.text, str) and re.fullmatch(r"[+\d•]{7,}", m.text.strip()))
 def handle_check(message):
     """
-    🔢 عند إرسال رقم هاتف، يتم البحث عن الرسائل المرسلة له اليوم
-    سواء في الذاكرة أو من الـ API مع تأثير تحميل جميل.
+    🔢 عند إرسال رقم هاتف، يتم البحث عنه:
+    1️⃣ أولاً في الذاكرة SENT_MESSAGES_MEMORY (حسب أول وآخر 4 أرقام)
+    2️⃣ ثم في الـ API إن لم توجد نتيجة
     """
     if is_banned(message.from_user.id):
         bot.reply_to(message, "⛔ أنت محظور من استخدام البوت.")
@@ -1422,83 +1498,78 @@ def handle_check(message):
         norm_q = re.sub(r"\D", "", phone)
         chat_id = message.chat.id
 
-        # 🎛️ تأثير التحميل دائمًا قبل أي تحقق
+        # 🎛️ تأثير التحميل
         loading_success = run_loading_effect_for_chat(chat_id, "🔎 جاري البحث عن الكود...")
         if not loading_success:
             bot.reply_to(message, "⚠️ حدث خطأ أثناء التحميل. حاول مرة أخرى.", parse_mode="HTML")
             return
 
-        # 🔍 التحقق أولاً من الذاكرة
-        found_in_memory = [
-            msg for msg in SENT_MESSAGES_MEMORY
-            if re.sub(r"\D", "", msg["phone"]) == norm_q
-        ]
-
-        if found_in_memory:
-            # ✅ بعد التحميل، أظهر النتيجة مثل الـ API
-            if len(found_in_memory) == 1:
-                bot.send_message(
-                    chat_id,
-                    f"📬 تم العثور على الكود بنجاح لرقم\n<code>{html_escape(phone)}</code>",
-                    parse_mode="HTML"
-                )
-            else:
-                bot.send_message(
-                    chat_id,
-                    f"📬 تم العثور على {len(found_in_memory)} أكواد لرقم\n<code>{html_escape(phone)}</code>",
-                    parse_mode="HTML"
-                )
-
-            # إرسال الرسائل المخزنة
-            for msg in found_in_memory:
-                bot.send_message(chat_id, msg["text"], parse_mode="HTML")
-            return  # لا داعي للبحث في الـ API
-
-        # 🔍 إذا لم يُعثر عليه في الذاكرة → نبحث في الـ API
+        start_part = norm_q[:4]
+        end_part = norm_q[-4:]
         found_results = []
 
-        for acc in ACCOUNTS:
-            data, _ = fetch_sms(
-                api_url=acc.get("api_url"),
-                username=acc.get("username"),
-                password=acc.get("password"),
-                last_id=None,
-                page=1,
-                per_page=PER_PAGE
-            )
-            if not data:
-                continue
+        # ✅ 1. البحث في الذاكرة
+        for msg in SENT_MESSAGES_MEMORY:
+            stored_phone = str(msg.get("phone", ""))
+            clean_stored = re.sub(r"\D", "", stored_phone)
+            if (
+                clean_stored == norm_q
+                or (clean_stored.startswith(start_part) and clean_stored.endswith(end_part))
+                or (stored_phone.startswith(start_part) and stored_phone.endswith(end_part))
+                or (f"{start_part}•••{end_part}" in stored_phone)
+                or (f"{start_part}***{end_part}" in stored_phone)
+            ):
+                found_results.append(msg["text"])
 
-            items = []
-            if isinstance(data, list):
-                items = data
-            elif isinstance(data, dict):
-                items = data.get("data") or data.get("items") or []
-
-            for row in items:
-                number = str(row.get("destination_addr") or row.get("destination") or "")
-                raw_msg = row.get("short_message") or row.get("message") or ""
-                msg_text = decode_short_message(raw_msg)
-                otp = extract_otp(msg_text)
-                if not otp:
+        # ✅ 2. البحث في الـ API إذا لم نجد في الذاكرة
+        if not found_results:
+            for acc in ACCOUNTS:
+                data, _ = fetch_sms(
+                    api_url=acc.get("api_url"),
+                    username=acc.get("username"),
+                    password=acc.get("password"),
+                    last_id=None,
+                    page=1,
+                    per_page=PER_PAGE
+                )
+                if not data:
                     continue
 
-                norm_num = re.sub(r"\D", "", number)
-                if norm_q.endswith(norm_num) or norm_num.endswith(norm_q) or norm_q == norm_num:
-                    country_name, country_flag = detect_country_and_flag(number)
-                    safe_msg = html_lib.escape(msg_text.strip())
-                    date_str = str(row.get("start_stamp") or row.get("date") or "")
+                # التعامل مع شكل البيانات
+                items = data if isinstance(data, list) else data.get("data") or data.get("items") or []
 
-                    formatted = (
-                        f"☎️ <b>Number:</b> <code>{html_escape(number)}</code>\n"
-                        f"🔐 <b>Code:</b> <code>{html_escape(otp)}</code>\n"
-                        f"🌎 <b>Country:</b> {country_flag} <b>{html_escape(country_name)}</b>\n"
-                        f"🕒 <b>Time:</b> <code>{html_escape(date_str)}</code>\n"
-                        f"<pre><b>💌 Full Message</b></pre>\n<pre>{safe_msg}</pre>"
-                    )
-                    found_results.append(formatted)
+                for row in items:
+                    number = str(row.get("destination_addr") or row.get("destination") or "")
+                    raw_msg = row.get("short_message") or row.get("message") or ""
+                    msg_text = decode_short_message(raw_msg)
+                    otp = extract_otp(msg_text)
+                    if not otp:
+                        continue
 
-        # 📨 عرض النتائج النهائية
+                    norm_num = re.sub(r"\D", "", number)
+                    if (
+                        norm_q == norm_num
+                        or norm_q.endswith(norm_num)
+                        or norm_num.endswith(norm_q)
+                        or (norm_num.startswith(start_part) and norm_num.endswith(end_part))
+                    ):
+                        country_name, country_flag = detect_country_and_flag(number)
+                        safe_msg = html_lib.escape(msg_text.strip())
+                        date_str = str(row.get("start_stamp") or row.get("date") or "")
+
+                        formatted = (
+                            f"☎️ <b>Number:</b> <code>{html_escape(number)}</code>\n"
+                            f"🔐 <b>Code:</b> <code>{html_escape(otp)}</code>\n"
+                            f"🌎 <b>Country:</b> {country_flag} <b>{html_escape(country_name)}</b>\n"
+                            f"🕒 <b>Time:</b> <code>{html_escape(date_str)}</code>\n"
+                            f"<pre><b>💌 Full Message</b></pre>\n<pre>{safe_msg}</pre>"
+                        )
+                        found_results.append(formatted)
+
+        # 🔁 إزالة التكرارات
+        found_results = list(dict.fromkeys(found_results))
+
+        # 📩 عرض النتائج
         if not found_results:
             bot.send_message(
                 chat_id,
@@ -1507,20 +1578,12 @@ def handle_check(message):
             )
             return
 
-        if len(found_results) == 1:
-            bot.send_message(
-                chat_id,
-                f"📬 تم العثور على الكود بنجاح لرقم\n<code>{html_escape(phone)}</code>",
-                parse_mode="HTML"
-            )
-        else:
-            bot.send_message(
-                chat_id,
-                f"📬 تم العثور على {len(found_results)} أكواد لرقم\n<code>{html_escape(phone)}</code>",
-                parse_mode="HTML"
-            )
+        bot.send_message(
+            chat_id,
+            f"📬 تم العثور على {len(found_results)} نتيجة{' واحدة' if len(found_results) == 1 else ''} لرقم\n<code>{html_escape(phone)}</code>",
+            parse_mode="HTML"
+        )
 
-        # إرسال كل الأكواد
         for res in found_results:
             bot.send_message(chat_id, res, parse_mode="HTML")
 
@@ -1546,7 +1609,7 @@ def send_to_groups(message_text, groups):
     for gid in groups:
         try:
             bot.send_message(gid, message_text, parse_mode="HTML")
-            time.sleep(1)  # تأخير 1 ثانية بين كل رسالة
+            time.sleep(0.6)  # تأخير 1 ثانية بين كل رسالة
         except Exception as e:
             logger.error("Failed to send message to group %s: %s", gid, e)
 
@@ -1555,7 +1618,7 @@ def send_to_users(message_text, users):
     for uid in users:
         try:
             bot.send_message(uid, message_text, parse_mode="HTML")
-            time.sleep(1)  # تأخير 1 ثانية
+            time.sleep(0.2)  # تأخير 1 ثانية
         except Exception as e:
             logger.error("Failed to send message to user %s: %s", uid, e)
 
@@ -1582,6 +1645,138 @@ def process_all_message(message):
 
     bot.reply_to(message, f"✅ تم إرسال الإذاعة إلى {sent_count} جروبات ومستخدمين.")
 #$#$
+import json
+import threading
+import datetime
+import os
+import time
+from datetime import date
+
+# 📂 إعدادات النسخ الاحتياطي
+BACKUP_DIR = "backups"
+os.makedirs(BACKUP_DIR, exist_ok=True)
+
+BACKUP_INTERVAL = 60 * 60 * 2  # كل ساعتين
+MAX_BACKUPS = 3  # يحتفظ بآخر 3 نسخ فقط
+ADMIN_ID = 8038053114  # ضع هنا ID الأدمن الحقيقي
+
+
+def cleanup_old_backups():
+    """
+    🧹 حذف النسخ القديمة والاحتفاظ بآخر MAX_BACKUPS فقط
+    """
+    backups = sorted(
+        [f for f in os.listdir(BACKUP_DIR) if f.endswith(".json")],
+        key=lambda x: os.path.getmtime(os.path.join(BACKUP_DIR, x))
+    )
+
+    if len(backups) > MAX_BACKUPS:
+        to_delete = backups[:-MAX_BACKUPS]
+        for f in to_delete:
+            try:
+                os.remove(os.path.join(BACKUP_DIR, f))
+                print(f"🗑️ تم حذف النسخة القديمة: {f}")
+            except Exception as e:
+                print(f"⚠️ فشل حذف {f}: {e}")
+
+
+def create_backup():
+    """
+    📦 إنشاء نسخة احتياطية وحفظها في ملف داخل مجلد backups/
+    """
+    try:
+        now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+        backup_file = os.path.join(BACKUP_DIR, f"backup_{now}.json")
+
+        backup_data = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "users_count": len(USERS_DB) if "USERS_DB" in globals() else 0,
+            "sent_messages_memory": SENT_MESSAGES_MEMORY,
+            "banned_users": list(BANNED_USERS) if "BANNED_USERS" in globals() else [],
+            "settings": {
+                "required_channels": REQUIRED_CHANNELS,
+                "accounts": ACCOUNTS,
+            },
+        }
+
+        with open(backup_file, "w", encoding="utf-8") as f:
+            json.dump(backup_data, f, ensure_ascii=False, indent=2)
+
+        print(f"✅ تم إنشاء نسخة احتياطية: {backup_file}")
+        cleanup_old_backups()
+        return backup_file
+    except Exception as e:
+        print("❌ خطأ أثناء إنشاء النسخة:", e)
+        return None
+
+
+def send_backup_to_admin():
+    """
+    🕒 كل ساعتين → إنشاء نسخة وإرسالها للإدمن تلقائيًا
+    """
+    try:
+        backup_path = create_backup()
+        if backup_path:
+            with open(backup_path, "rb") as f:
+                bot.send_document(
+                    ADMIN_ID,
+                    f,
+                    caption=f"📦 نسخة احتياطية جديدة\n🕒 {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}"
+                )
+    except Exception as e:
+        print("⚠️ فشل إرسال النسخة:", e)
+    finally:
+        threading.Timer(BACKUP_INTERVAL, send_backup_to_admin).start()
+
+
+# 🚀 تشغيل النسخ التلقائي عند بدء البوت
+threading.Timer(10, send_backup_to_admin).start()
+
+
+# ========== الأوامر اليدوية ==========
+@bot.message_handler(commands=["backup"])
+def cmd_backup(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    backup_path = create_backup()
+    if backup_path:
+        with open(backup_path, "rb") as f:
+            bot.send_document(
+                ADMIN_ID,
+                f,
+                caption="📦 نسخة احتياطية يدوية تم إنشاؤها الآن."
+            )
+
+
+@bot.message_handler(content_types=["document"])
+def handle_backup_upload(message):
+    """
+    🧰 عند رفع ملف backup.json → استرجاع البيانات مباشرة
+    """
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    try:
+        file_info = bot.get_file(message.document.file_id)
+        downloaded = bot.download_file(file_info.file_path)
+
+        restore_path = os.path.join(BACKUP_DIR, "restore.json")
+        with open(restore_path, "wb") as f:
+            f.write(downloaded)
+
+        with open(restore_path, "r", encoding="utf-8") as f:
+            backup_data = json.load(f)
+
+        # 🔁 استرجاع البيانات
+        global SENT_MESSAGES_MEMORY, BANNED_USERS, REQUIRED_CHANNELS, ACCOUNTS
+        SENT_MESSAGES_MEMORY = backup_data.get("sent_messages_memory", [])
+        BANNED_USERS = set(backup_data.get("banned_users", []))
+        REQUIRED_CHANNELS = backup_data["settings"].get("required_channels", [])
+        ACCOUNTS = backup_data["settings"].get("accounts", [])
+
+        bot.reply_to(message, "✅ تم استرجاع النسخة الاحتياطية بنجاح.")
+    except Exception as e:
+        bot.reply_to(message, f"❌ فشل الاسترجاع: <code>{html_escape(str(e))}</code>", parse_mode="HTML")
 # ========== Memory Cleanup System ==========
 def cleanup_sent_memory():
     """
