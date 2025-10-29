@@ -14,7 +14,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from datetime import datetime, date
 
 # ================== CONFIG ==================
-BOT_TOKEN = os.getenv("BOT_TOKEN") or "8438435636:AAEMBCOsoqaw-JBJ_RuUD_LRilEaKSlKHc0"
+BOT_TOKEN = os.getenv("BOT_TOKEN") or "8438435636:AAFLsC9aoP6xABrgHJy-elXlw1wCZ4OCsLk"
 ADMIN_ID = int(os.getenv("ADMIN_ID") or 8038053114)
 CHANNEL_ID = -1003214839852
 CHAT_IDS = []
@@ -909,7 +909,7 @@ def cmd_status(m):
 
     txt = "📊 <b>حالة البوت</b>\n\n"
     txt += f"🔄 <b>المراقبة:</b> {'مفعّلة' if cfg.get('monitoring_active', True) else 'متوقفة'}\n"
-    txt += f"📅 <b>التاريخ الحالي:</b> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+    txt += f"📅 <b>التاريخ الحالي:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
     txt += f"📱 <b>عدد الرسائل اليوم:</b> {stats.get('today_sms_count', 0)}\n"
     txt += f"📊 <b>إجمالي الرسائل:</b> {stats.get('total_sms_sent', 0)}\n"
     txt += f"👥 <b>عدد المجموعات:</b> {len(groups)}\n"
@@ -1645,13 +1645,6 @@ def process_all_message(message):
 
     bot.reply_to(message, f"✅ تم إرسال الإذاعة إلى {sent_count} جروبات ومستخدمين.")
 #$#$
-import json
-import threading
-import datetime
-import os
-import time
-from datetime import date
-
 # 📂 إعدادات النسخ الاحتياطي
 BACKUP_DIR = "backups"
 os.makedirs(BACKUP_DIR, exist_ok=True)
@@ -1685,11 +1678,11 @@ def create_backup():
     📦 إنشاء نسخة احتياطية وحفظها في ملف داخل مجلد backups/
     """
     try:
-        now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+        now = datetime.now().strftime("%Y-%m-%d_%H-%M")
         backup_file = os.path.join(BACKUP_DIR, f"backup_{now}.json")
 
         backup_data = {
-            "timestamp": datetime.datetime.now().isoformat(),
+            "timestamp": datetime.now().isoformat(),
             "users_count": len(USERS_DB) if "USERS_DB" in globals() else 0,
             "sent_messages_memory": SENT_MESSAGES_MEMORY,
             "banned_users": list(BANNED_USERS) if "BANNED_USERS" in globals() else [],
@@ -1721,7 +1714,7 @@ def send_backup_to_admin():
                 bot.send_document(
                     ADMIN_ID,
                     f,
-                    caption=f"📦 نسخة احتياطية جديدة\n🕒 {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}"
+                    caption=f"📦 نسخة احتياطية جديدة\n🕒 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
                 )
     except Exception as e:
         print("⚠️ فشل إرسال النسخة:", e)
@@ -1832,4 +1825,4 @@ if __name__ == "__main__":
             print(f"[WARNING] ⚠️ البوت انفصل مؤقتًا: {e}")
             time.sleep(5)
             print("[*] 🔄 إعادة الاتصال...")
-            continue 
+            continue
