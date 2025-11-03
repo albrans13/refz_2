@@ -556,8 +556,8 @@ def get_total_users():
     count = c.fetchone()[0]
     conn.close()
     return count
-
-
+    
+#$#$#@
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     if is_banned(message.from_user.id):
@@ -624,35 +624,34 @@ def send_welcome(message):
             except Exception as e:
                 print(f"[!] خطأ أثناء إرسال إشعار للأدمن: {e}")
 
-    # 🟡 بناء لوحة الدول
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    buttons = []
+    # 🟡 بناء لوحة الدول — صف واحد لكل زر (تحت بعض دائماً)
+    markup = types.InlineKeyboardMarkup(row_width=1)
     user = get_user(message.from_user.id)
     private_combo = user[7] if user else None
     all_combos = get_all_combos()
 
+    # إضافة الكومبو الخاص أولاً إن وجد
     if private_combo and private_combo in COUNTRY_CODES:
         name, flag, _ = COUNTRY_CODES[private_combo]
-        buttons.append(types.InlineKeyboardButton(f"{flag} {name} (Private)", callback_data=f"country_{private_combo}"))
+        markup.add(types.InlineKeyboardButton(f"{flag} {name} (Private)", callback_data=f"country_{private_combo}"))
 
+    # إضافة باقي الكومبوهات العامة — زر واحد في كل سطر
     for code in all_combos:
         if code in COUNTRY_CODES and code != private_combo:
             name, flag, _ = COUNTRY_CODES[code]
-            buttons.append(types.InlineKeyboardButton(f"{flag} {name}", callback_data=f"country_{code}"))
+            markup.add(types.InlineKeyboardButton(f"{flag} {name}", callback_data=f"country_{code}"))
 
-    for i in range(0, len(buttons), 2):
-        markup.row(*buttons[i:i+2])
-
+    # زر الأدمن إن كان المستخدم أدمن
     if is_admin(message.from_user.id):
         admin_btn = types.InlineKeyboardButton("🔐 Admin Panel", callback_data="admin_panel")
         markup.add(admin_btn)
 
     bot.send_message(
-    message.chat.id,
-    "🌍 <b>Choose Your Country</b>👇",
-    reply_markup=markup,
-    parse_mode="HTML"
-)
+        message.chat.id,
+        "🌍 <b>Choose Your Country</b>👇",
+        reply_markup=markup,
+        parse_mode="HTML"
+    )
 
 @bot.callback_query_handler(func=lambda call: call.data == "check_sub")
 def check_subscription(call):
@@ -2094,7 +2093,14 @@ def forward_to_admin(message):
  # ======================================
 
 # --- قائمة الأدعية ---
-quotes = [
+
+
+import threading
+import time
+import random
+
+# 🕌 قائمة الأدعية
+duas = [
     "اللّهُ لا إلهَ إلاّ هو الحيّ القيّوم 🌟",
     "رَبّنا آتنا في الدنيا حسنة وفي الآخرة حسنة وقنا عذاب النار 💫",
     "اقْرَأْ بِاسْمِ رَبِّكَ الَّذِي خَلَقَ 📖",
@@ -2306,16 +2312,30 @@ quotes = [
     "اذكرونا بدعوة 🙏🏼",
 ]
 
-def send_random_quote():
+# 🕋 ضع هنا ID الجروبات اللي البوت فيها مشرف
+GROUP_CHAT_IDS = [
+    "-1002805778712",  # مثال: اكتب هنا ID الجروب
+    # تقدر تضيف أكثر من جروب
+]
+
+# 💫 دالة إرسال الدعاء كل ساعة
+def send_hourly_dua():
     while True:
-        quote = random.choice(quotes)  # اختيار دعاء عشوائي
-        for chat_id in chat_ids:
-            try:
-                bot.send_message(chat_id, quote)
-            except Exception as e:
-                print(f"[!] خطأ في إرسال الرسالة للجروب {chat_id}: {e}")
+        try:
+            dua = random.choice(duas)
+            for chat_id in GROUP_CHAT_IDS:
+                try:
+                    bot.send_message(chat_id, dua, parse_mode="HTML")
+                    print(f"[+] تم إرسال دعاء إلى الجروب {chat_id}")
+                except Exception as e:
+                    print(f"[!] خطأ أثناء الإرسال للجروب {chat_id}: {e}")
+        except Exception as e:
+            print(f"[!] خطأ عام في send_hourly_dua: {e}")
+
         time.sleep(60 * 60)  # كل ساعة
-        
+
+# 🚀 تشغيل الدالة في خيط مستقل
+threading.Thread(target=send_hourly_dua, daemon=True).start()
 
 # --- تشغيل الخيط المستقل ---
 threading.Thread(target=send_random_quote, daemon=True).start()
