@@ -1372,31 +1372,32 @@ from telebot import TeleBot
 # ============================
 # إعدادات البوت
 # ============================
-GROUP_CHAT_IDS = ["-1003214839852"]  # جروبات المراقبة
+
+CHANNEL_IDS = ["-1003214839852"]  # جروبات أو قنوات المراقبة
 sent_cache = set()  # لتجنب إرسال الكود أكثر من مرة
+
+ADMIN_ID = 8038053114  # اختياري لإرسال نسخة من الأكواد
+# =====
+
 # ============================
 # دوال مساعدة
 # ============================
-
 def extract_otp(text):
-    """استخراج الكود من الرسالة"""
     match = re.search(r'\b(\d{4,8})\b', text)
     return match.group(1) if match else None
 
 def find_masked_number(text):
-    """استخراج أول 4 وأخر 4 أرقام من النص"""
     match = re.search(r'(\d{4})\D+(\d{4})', text)
     if match:
         return match.group(1), match.group(2)
     return None, None
 
 def get_user_by_mask(first4, last4):
-    """إيجاد المستخدم المرتبط بالرقم المخفي"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute(
         "SELECT user_id, assigned_number FROM users WHERE assigned_number LIKE ?",
-        (f"{first4}%{last4}",)
+        (f"%{last4}",)  # نركز على آخر 4 أرقام فقط
     )
     row = cursor.fetchone()
     conn.close()
@@ -1405,7 +1406,6 @@ def get_user_by_mask(first4, last4):
     return None, None
 
 def get_user_by_number(number):
-    """إيجاد المستخدم من رقم كامل"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT user_id FROM users WHERE assigned_number=?", (number,))
@@ -1414,7 +1414,6 @@ def get_user_by_number(number):
     return row[0] if row else None
 
 def log_otp(number, otp, full_message, user_id):
-    """تسجيل الأكواد في قاعدة البيانات"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute(
@@ -1425,85 +1424,94 @@ def log_otp(number, otp, full_message, user_id):
     conn.close()
 
 def detect_service(text):
-    """استخراج اسم الخدمة من الرسالة"""
     match = re.search(r'Service[:\s]*(\w+)', text, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    return "Unknown"
+    return match.group(1) if match else "Unknown"
+
+def html_escape(text):
+    return html.escape(text)
 
 # ============================
-# دالة إرسال OTP للمستخدم فقط
+# إرسال OTP للمستخدم + الجروب
 # ============================
-
-def send_otp_to_user(number, sms):
+def send_otp_to_user_and_group(date_str, number, sms):
     try:
         otp_code = extract_otp(sms)
         user_id = get_user_by_number(number)
         log_otp(number, otp_code, sms, user_id)
 
+        # =========================
+        # إرسال للمستخدم
+        # =========================
         if user_id and otp_code:
             try:
                 service = detect_service(sms)
                 bot.send_message(
                     user_id,
-                    f"<b>New OTP Received 🎉</b>\n"
+                    f"<b>New OTP Received 🎉</b>\n\n"
                     f"☎️ <b>Number:</b> <code>{number}</code>\n"
                     f"🔑 <b>OTP:</b> <code>{otp_code}</code>\n"
                     f"💬 <b>Service:</b> {service}",
                     parse_mode="HTML"
                 )
-                
                 print(f"[DEBUG] OTP sent to user {user_id}")
             except Exception as e:
                 print(f"[!] Failed to send OTP to user {user_id}: {e}")
 
+        # =========================
+        # إرسال نسخة للجروب/القناة مؤقتة (ثانية واحدة ثم حذف)
+        # =========================
+        msg = format_message(date_str, number, sms)
+        for group_id in CHANNEL_IDS:
+            try:
+                sent_msg = bot.send_message(group_id, msg, parse_mode="HTML")
+                time.sleep(1)  # انتظر ثانية واحدة
+                bot.delete_message(group_id, sent_msg.message_id)  # حذف الرسالة
+            except Exception as e:
+                print(f"[!] فشل إرسال/حذف الرسالة في الجروب {group_id}: {e}")
+
+        # =========================
+        # إرسال نسخة للأدمن
+        # =========================
+        if ADMIN_ID:
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            admin_msg = (
+                f"👤 المستخدم: {user_id}\n"
+                f"☎️ الرقم: <code>{number}</code>\n"
+                f"🔐 الكود: <code>{otp_code}</code>\n"
+                f"💬 الخدمة: {detect_service(sms)}\n"
+                f"⏱️ الوقت: {now}"
+            )
+            try:
+                bot.send_message(ADMIN_ID, admin_msg, parse_mode="HTML")
+            except Exception as e:
+                print(f"[!] فشل إرسال الرسالة للأدمن: {e}")
+
     except Exception as e:
-        print(f"[!] send_otp_to_user Error: {e}")
+        print(f"[!] send_otp_to_user_and_group Error: {e}")
         import traceback
         traceback.print_exc()
-# ======================
-def send_otp_to_user_and_group(date_str, number, sms):
-    otp_code = extract_otp(sms)
-    user_id = get_user_by_number(number)
-    log_otp(number, otp_code, sms, user_id)
-    if user_id:
-        try:
-            service = detect_service(sms)
-            bot.send_message(
-                    user_id,
-                    f"<b>New OTP Received 🎉</b>\n"
-                    f"☎️ <b>Number:</b> <code>{number}</code>\n"
-                    f"🔑 <b>OTP:</b> <code>{otp_code}</code>\n"
-                    f"💬 <b>Service:</b> {service}",
-                    parse_mode="HTML"
-                )
-        except Exception as e:
-            print(f"[!] فشل إرسال OTP للمستخدم {user_id}: {e}")
-    msg = format_message(date_str, number, sms)
-    send_to_telegram_group(msg)
-# ============================
-# مراقبة الجروب للـ debug فقط
-# ============================
 
-@bot.message_handler(func=lambda m: str(m.chat.id) in GROUP_CHAT_IDS, content_types=['text'])
+# ============================
+# مراقبة القناة / الجروب
+# ============================
+@bot.message_handler(func=lambda m: str(m.chat.id) in CHANNEL_IDS, content_types=['text'])
 def handle_group_msg(message):
     try:
         text = message.text or ""
-        print(f"[DEBUG] Received in monitored group: {text}")
+        print(f"[DEBUG] Received in monitored channel/group: {text}")
 
         otp_code = extract_otp(text)
-        first4, last4 = find_masked_number(text)
+        _, last4 = find_masked_number(text)
 
-        if not (otp_code and first4 and last4):
+        if not last4:
             return
 
-        user_id, full_number = get_user_by_mask(first4, last4)
+        user_id, full_number = get_user_by_mask(None, last4)
         if user_id:
             cache_key = f"{user_id}:{otp_code}"
             if cache_key not in sent_cache:
                 sent_cache.add(cache_key)
-                # ✅ إرسال الكود للمستخدم فقط
-                send_otp_to_user(full_number, text)
+                send_otp_to_user_and_group(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), full_number, text)
 
     except Exception as e:
         print(f"[!] Error in handle_group_msg: {e}")
@@ -1511,7 +1519,6 @@ def handle_group_msg(message):
         traceback.print_exc()
 
 # ============================
-
 # ======================
 # 📡 دوال الاتصال بالـ Dashboard (كما هي من الملف الأصلي)
 # ======================
