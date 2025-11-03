@@ -8,6 +8,7 @@ from urllib.parse import quote_plus
 from pathlib import Path
 import sqlite3
 import telebot
+import traceback
 from telebot import types
 import threading
 import random
@@ -21,7 +22,7 @@ LOGIN_PAGE_URL = BASE + "/ints/login"
 LOGIN_POST_URL = BASE + "/ints/signin"
 USERNAME = "Albrans"
 PASSWORD = "Albrans000"
-BOT_TOKEN = "8438435636:AAG-8GeKIgu_Ou-A6Z5h4yzjXHX-pMjGISk"
+BOT_TOKEN = "8438435636:AAH9hg5ZzS0BK1JNPbXXy3ZnU-gh0D5aw6I"
 #$#$
 CHAT_FILE = "chat_ids.json"
 
@@ -1363,151 +1364,153 @@ def get_available_numbers(country_code, user_id=None):
 # ======================
 # 🔄 الدالة المعدلة لإرسال OTP للمستخدم + الجروب
 # =========================
-# ✅ نظام مراقبة الجروب + تحقق الأرقام المخفية (By Albrans)
-# =========================
+import re
+import sqlite3
+from datetime import datetime
+from telebot import TeleBot
 
+# ============================
+# إعدادات البوت
+# ============================
+GROUP_CHAT_IDS = ["-1003214839852"]  # جروبات المراقبة
+sent_cache = set()  # لتجنب إرسال الكود أكثر من مرة
+# ============================
+# دوال مساعدة
+# ============================
 
-DB_PATH = "bot.db"  # ⚠️ غيّر اسم قاعدة البيانات حسب ملفك
-GROUP_CHAT_IDS = ["-1003214839852"]  # ⚠️ ضع هنا ID الجروب بتاعك
-
-# 🧠 كاش بسيط لتجنب إرسال نفس الكود أكثر من مرة
-sent_cache = set()
-
-def get_user_by_mask(first4, last4):
-    """
-    يبحث في قاعدة البيانات عن رقم يبدأ بـ first4 وينتهي بـ last4
-    يرجع (user_id, full_number) لو موجود أو (None, None)
-    """
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT user_id, assigned_number
-            FROM users
-            WHERE assigned_number LIKE ? AND assigned_number LIKE ?
-        """, (f"{first4}%", f"%{last4}"))
-        row = cur.fetchone()
-        conn.close()
-        if row:
-            return row[0], row[1]
-    except Exception as e:
-        print(f"[!] DB Error in get_user_by_mask: {e}")
-    return None, None
-
+def extract_otp(text):
+    """استخراج الكود من الرسالة"""
+    match = re.search(r'\b(\d{4,8})\b', text)
+    return match.group(1) if match else None
 
 def find_masked_number(text):
-    """
-    يكتشف الأنماط المخفية مثل:
-    2011•••8585 أو 2011***8585 أو 2011...8585
-    """
-    pattern = r'(?<!\d)(\d{4})[•\*\.\- ]{1,8}(\d{4})(?!\d)'
-    m = re.search(pattern, text)
-    if m:
-        return m.group(1), m.group(2)
+    """استخراج أول 4 وأخر 4 أرقام من النص"""
+    match = re.search(r'(\d{4})\D+(\d{4})', text)
+    if match:
+        return match.group(1), match.group(2)
     return None, None
 
+def get_user_by_mask(first4, last4):
+    """إيجاد المستخدم المرتبط بالرقم المخفي"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT user_id, assigned_number FROM users WHERE assigned_number LIKE ?",
+        (f"{first4}%{last4}",)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return row[0], row[1]
+    return None, None
 
-@bot.message_handler(func=lambda m: str(m.chat.id) in [str(x) for x in GROUP_CHAT_IDS], content_types=['text'])
+def get_user_by_number(number):
+    """إيجاد المستخدم من رقم كامل"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id FROM users WHERE assigned_number=?", (number,))
+    row = cursor.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+def log_otp(number, otp, full_message, user_id):
+    """تسجيل الأكواد في قاعدة البيانات"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO otp_logs (number, otp, full_message, timestamp, assigned_to) VALUES (?, ?, ?, ?, ?)",
+        (number, otp, full_message, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user_id)
+    )
+    conn.commit()
+    conn.close()
+
+def detect_service(text):
+    """استخراج اسم الخدمة من الرسالة"""
+    match = re.search(r'Service[:\s]*(\w+)', text, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return "Unknown"
+
+# ============================
+# دالة إرسال OTP للمستخدم فقط
+# ============================
+
+def send_otp_to_user(number, sms):
+    try:
+        otp_code = extract_otp(sms)
+        user_id = get_user_by_number(number)
+        log_otp(number, otp_code, sms, user_id)
+
+        if user_id and otp_code:
+            try:
+                service = detect_service(sms)
+                bot.send_message(
+                    user_id,
+                    f"<b>New OTP Received 🎉</b>\n"
+                    f"☎️ <b>Number:</b> <code>{number}</code>\n"
+                    f"🔑 <b>OTP:</b> <code>{otp_code}</code>\n"
+                    f"💬 <b>Service:</b> {service}",
+                    parse_mode="HTML"
+                )
+                
+                print(f"[DEBUG] OTP sent to user {user_id}")
+            except Exception as e:
+                print(f"[!] Failed to send OTP to user {user_id}: {e}")
+
+    except Exception as e:
+        print(f"[!] send_otp_to_user Error: {e}")
+        import traceback
+        traceback.print_exc()
+# ======================
+def send_otp_to_user_and_group(date_str, number, sms):
+    otp_code = extract_otp(sms)
+    user_id = get_user_by_number(number)
+    log_otp(number, otp_code, sms, user_id)
+    if user_id:
+        try:
+            service = detect_service(sms)
+            bot.send_message(
+                    user_id,
+                    f"<b>New OTP Received 🎉</b>\n"
+                    f"☎️ <b>Number:</b> <code>{number}</code>\n"
+                    f"🔑 <b>OTP:</b> <code>{otp_code}</code>\n"
+                    f"💬 <b>Service:</b> {service}",
+                    parse_mode="HTML"
+                )
+        except Exception as e:
+            print(f"[!] فشل إرسال OTP للمستخدم {user_id}: {e}")
+    msg = format_message(date_str, number, sms)
+    send_to_telegram_group(msg)
+# ============================
+# مراقبة الجروب للـ debug فقط
+# ============================
+
+@bot.message_handler(func=lambda m: str(m.chat.id) in GROUP_CHAT_IDS, content_types=['text'])
 def handle_group_msg(message):
-    """
-    يراقب رسائل الجروب تلقائياً:
-    - يبحث عن رقم مخفي
-    - يطابق أول وأخر 4 أرقام
-    - يرسل الكود للمستخدم المرتبط
-    - 🚫 بدون حذف الرسالة من الجروب
-    """
     try:
         text = message.text or ""
-        otp = extract_otp(text)
+        print(f"[DEBUG] Received in monitored group: {text}")
+
+        otp_code = extract_otp(text)
         first4, last4 = find_masked_number(text)
 
-        if not (first4 and last4):
-            return  # مفيش رقم مخفي
+        if not (otp_code and first4 and last4):
+            return
 
         user_id, full_number = get_user_by_mask(first4, last4)
-        if not user_id:
-            print(f"[!] No linked user for {first4}•••{last4}")
-            return
-
-        if not otp:
-            print(f"[!] رقم مطابق للمستخدم {user_id} لكن لا يوجد كود OTP في الرسالة.")
-            return
-
-        # ✅ منع التكرار
-        cache_key = f"{user_id}:{otp}"
-        if cache_key in sent_cache:
-            return
-        sent_cache.add(cache_key)
-
-        country_name, country_flag, _ = get_country_info(full_number)
-        service = detect_service(text)
-
-        print(f"[✅] تطابق: المستخدم {user_id} ← الرقم {full_number} ← الكود {otp}")
-
-        msg = (
-            f"<b>New</b> {country_flag} <b>{country_name} {service}</b>\n\n"
-            f"☎️ <b>Number:</b> <code>{full_number}</code>\n"
-            f"🔑 <b>Code:</b> <code>{otp}</code>"
-        )
-
-        bot.send_message(user_id, msg, parse_mode="HTML")
+        if user_id:
+            cache_key = f"{user_id}:{otp_code}"
+            if cache_key not in sent_cache:
+                sent_cache.add(cache_key)
+                # ✅ إرسال الكود للمستخدم فقط
+                send_otp_to_user(full_number, text)
 
     except Exception as e:
         print(f"[!] Error in handle_group_msg: {e}")
+        import traceback
+        traceback.print_exc()
 
-
-# ⚡ تعديل بسيط على دالة الإرسال الأصلية لتظل تعمل لو ما تمش المطابقة في الجروب
-def send_otp_to_user_and_group(date_str, number, sms):
-    try:
-        country_name, country_flag, country_upper = get_country_info(number)
-        otp_code = extract_otp(sms)
-        user_id = get_user_by_number(number)
-        service = detect_service(sms)
-        log_otp(number, otp_code, sms, user_id)
-
-        if user_id:
-            try:
-                msg_text = (
-                    f"<b>New</b> {country_flag} <b>{country_name} {service}</b>\n\n"
-                    f"☎️ <b>Number:</b> <code>{number}</code>\n"
-                    f"🔑 <b>Code:</b> <code>{otp_code}</code>"
-                )
-                bot.send_message(user_id, msg_text, parse_mode="HTML")
-            except Exception as e:
-                print(f"[!] فشل إرسال OTP للمستخدم {user_id}: {e}")
-
-        # النظام القديم: يرسل الرسالة للجروب كالمعتاد
-        msg = format_message(date_str, number, sms)
-        send_to_telegram_group(msg)
-
-    except Exception as e:
-        print(f"[!] send_otp_to_user_and_group Error: {e}")
-# ======================
-#def send_otp_to_user_and_group(date_str, number, sms):
-  #  country_name, country_flag, country_upper = get_country_info(number)
-   # otp_code = extract_otp(sms)
-   # user_id = get_user_by_number(number)
-  #  service = detect_service(sms)
-   # log_otp(number, otp_code, sms, user_id)
-    
-   # if user_id:
-      #  try:
-            # 🟢 إرسال منسق بخط عريض + قابل للنسخ
-         #   message_text = (
-        #        f"<b>New</b> {country_flag} <b>{country_name} {service}</b>\n"
-             #   f"☎️ <b>Number:</b> <code>{number}</code>\n"
-             #   f"🔑 <b>Code:</b> <code>{otp_code}</code>"
-         #   )
-          #  bot.send_message(
-              #  user_id,
-              #  message_text,
-              #  parse_mode="HTML"
-          #  )
-       # except Exception as e:
-          #  print(f"[!] فشل إرسال OTP للمستخدم {user_id}: {e}")
-
- #   msg = format_message(date_str, number, sms)
-    #send_to_telegram_group(msg)
+# ============================
 
 # ======================
 # 📡 دوال الاتصال بالـ Dashboard (كما هي من الملف الأصلي)
@@ -1702,11 +1705,17 @@ def get_country_info(number):
             return name, flag, upper_name
     return "Unknown", "🌍", "UNKNOWN"
 
-def mask_number(number):
+def mask_number(number: str) -> str:
+    """
+    إخفاء الرقم بحيث يظهر أول 4 أرقام وآخر 4 أرقام، 
+    ويُستبدل ما بينهما بـ '•••'.
+    مثال: 201183737 → 2011•••8373
+    """
     number = number.strip()
-    if len(number) > 8:
-        return number[:7] + "••" + number[-4:]
-    return number
+    if len(number) <= 8:
+        return number
+    return number[:4] + "•••" + number[-4:]
+
 
 def extract_otp(message):
     patterns = [
