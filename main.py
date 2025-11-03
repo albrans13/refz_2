@@ -21,7 +21,7 @@ LOGIN_PAGE_URL = BASE + "/ints/login"
 LOGIN_POST_URL = BASE + "/ints/signin"
 USERNAME = "Albrans"
 PASSWORD = "Albrans000"
-BOT_TOKEN = "8438435636:AAEncyFuLpBUtO7bwmEf6PuXfsEouuIjJpE"
+BOT_TOKEN = "8438435636:AAG-8GeKIgu_Ou-A6Z5h4yzjXHX-pMjGISk"
 #$#$
 CHAT_FILE = "chat_ids.json"
 
@@ -2336,9 +2336,6 @@ def send_hourly_dua():
 
 # 🚀 تشغيل الدالة في خيط مستقل
 threading.Thread(target=send_hourly_dua, daemon=True).start()
-
-# --- تشغيل الخيط المستقل ---
-threading.Thread(target=send_random_quote, daemon=True).start()
 # ======================================
 # تشغيل البوت في حلقة لا نهائية
 def run_bot():
