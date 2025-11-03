@@ -298,6 +298,7 @@ def init_db():
     c.execute('''
         CREATE TABLE IF NOT EXISTS dashboards (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
             base_url TEXT,
             ajax_path TEXT,
             login_page TEXT,
@@ -1133,6 +1134,9 @@ def admin_disable_force_sub(call):
 # ======================
 # 🖥️ ميزة لوحات الأرقام المتعددة
 # ======================
+# 🖥️ ميزة لوحات الأرقام المتعددة
+# ======================
+
 def get_dashboards():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -1141,14 +1145,17 @@ def get_dashboards():
     conn.close()
     return rows
 
-def save_dashboard(base_url, ajax_path, login_page, login_post, username, password):
+
+def save_dashboard(name, base_url, ajax_path, login_page, login_post, username, password):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("""INSERT INTO dashboards (base_url, ajax_path, login_page, login_post, username, password)
-                 VALUES (?, ?, ?, ?, ?, ?)""",
-              (base_url, ajax_path, login_page, login_post, username, password))
+    c.execute("""
+        INSERT INTO dashboards (name, base_url, ajax_path, login_page, login_post, username, password)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (name, base_url, ajax_path, login_page, login_post, username, password))
     conn.commit()
     conn.close()
+
 
 def delete_dashboard(dash_id):
     conn = sqlite3.connect(DB_PATH)
@@ -1156,6 +1163,7 @@ def delete_dashboard(dash_id):
     c.execute("DELETE FROM dashboards WHERE id=?", (dash_id,))
     conn.commit()
     conn.close()
+
 
 # --- لوحة الإدارة ---
 @bot.callback_query_handler(func=lambda call: call.data == "admin_dashboards")
@@ -1166,10 +1174,11 @@ def admin_dashboards(call):
     markup = types.InlineKeyboardMarkup()
     if dashboards:
         for d in dashboards:
-            markup.add(types.InlineKeyboardButton(f"لوحة {d[0]}", callback_data=f"view_dashboard_{d[0]}"))
+            markup.add(types.InlineKeyboardButton(f"🖥️ {d[1]}", callback_data=f"view_dashboard_{d[0]}"))
     markup.add(types.InlineKeyboardButton("➕ إضافة لوحة", callback_data="add_dashboard"))
-    markup.add(types.InlineKeyboardButton("🔙 Back", callback_data="admin_panel"))
+    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="admin_panel"))
     bot.edit_message_text("🖥️ لوحات الأرقام:", call.message.chat.id, call.message.message_id, reply_markup=markup)
+
 
 # --- عرض لوحة ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("view_dashboard_"))
@@ -1180,11 +1189,16 @@ def view_dashboard(call):
     if not dash:
         bot.answer_callback_query(call.id, "❌ اللوحة غير موجودة!")
         return
-    text = f"لوحة {dash_id}:\nBase: {dash[1]}\nUsername: {dash[5]}"
+    text = (
+        f"🖥️ <b>{dash[1]}</b>\n"
+        f"🌐 Base URL: {dash[2]}\n"
+        f"👤 Username: {dash[6]}"
+    )
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("🗑️ حذف", callback_data=f"del_dashboard_{dash_id}"))
-    markup.add(types.InlineKeyboardButton("🔙 Back", callback_data="admin_dashboards"))
-    bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
+    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="admin_dashboards"))
+    bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+
 
 # --- حذف لوحة ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("del_dashboard_"))
@@ -1194,14 +1208,15 @@ def del_dashboard(call):
     bot.answer_callback_query(call.id, "✅ تم الحذف!", show_alert=True)
     admin_dashboards(call)
 
-# --- إضافة لوحة ---
+
+# --- إضافة لوحة جديدة ---
 @bot.callback_query_handler(func=lambda call: call.data == "add_dashboard")
 def add_dashboard_step1(call):
     if not is_admin(call.from_user.id):
         return
     user_states[call.from_user.id] = {"step": "name"}
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("🔙 Back", callback_data="admin_dashboards"))
+    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="admin_dashboards"))
     bot.edit_message_text(
         "✨ أدخل اسم اللوحة الجديد ✨",
         call.message.chat.id,
@@ -1209,8 +1224,9 @@ def add_dashboard_step1(call):
         reply_markup=markup
     )
 
+
 # --- إدخال اسم اللوحة ---
-@bot.message_handler(func=lambda msg: isinstance(user_states.get(msg.from_user.id), dict) and user_states[msg.from_user.id].get("step") == "name")
+@bot.message_handler(func=lambda msg: user_states.get(msg.from_user.id, {}).get("step") == "name")
 def add_dashboard_name(message):
     user_states[message.from_user.id]["name"] = message.text
     user_states[message.from_user.id]["step"] = "base"
@@ -1221,8 +1237,9 @@ def add_dashboard_name(message):
     )
     user_states[message.from_user.id]["msg_id"] = [message.message_id, sent_msg.message_id]
 
+
 # --- Base URL ---
-@bot.message_handler(func=lambda msg: isinstance(user_states.get(msg.from_user.id), dict) and user_states[msg.from_user.id].get("step") == "base")
+@bot.message_handler(func=lambda msg: user_states.get(msg.from_user.id, {}).get("step") == "base")
 def add_dashboard_base(message):
     data = user_states[message.from_user.id]
     data["base"] = message.text
@@ -1231,8 +1248,9 @@ def add_dashboard_base(message):
     data["msg_id"].append(message.message_id)
     data["msg_id"].append(sent_msg.message_id)
 
+
 # --- Username ---
-@bot.message_handler(func=lambda msg: isinstance(user_states.get(msg.from_user.id), dict) and user_states[msg.from_user.id].get("step") == "username")
+@bot.message_handler(func=lambda msg: user_states.get(msg.from_user.id, {}).get("step") == "username")
 def add_dashboard_username(message):
     data = user_states[message.from_user.id]
     data["username"] = message.text
@@ -1241,41 +1259,50 @@ def add_dashboard_username(message):
     data["msg_id"].append(message.message_id)
     data["msg_id"].append(sent_msg.message_id)
 
+
 # --- Password ---
-@bot.message_handler(func=lambda msg: isinstance(user_states.get(msg.from_user.id), dict) and user_states[msg.from_user.id].get("step") == "password")
+@bot.message_handler(func=lambda msg: user_states.get(msg.from_user.id, {}).get("step") == "password")
 def add_dashboard_password(message):
     data = user_states[message.from_user.id]
     password = message.text
 
-    # --- القيم الثابتة لكل لوحة ---
+    # القيم الثابتة
     AJAX_PATH = "/ints/agent/res/data_smscdr.php"
     LOGIN_PAGE_URL = data["base"] + "/ints/login"
     LOGIN_POST_URL = data["base"] + "/ints/signin"
 
-    # حفظ اللوحة
+    # حفظ في قاعدة البيانات
     save_dashboard(
         name=data["name"],
-        base=data["base"],
-        ajax=AJAX_PATH,
+        base_url=data["base"],
+        ajax_path=AJAX_PATH,
         login_page=LOGIN_PAGE_URL,
         login_post=LOGIN_POST_URL,
         username=data["username"],
         password=password
     )
 
-    # حذف كل رسائل الادمن السابقة الخاصة بهذه الإضافة
+    # حذف الرسائل القديمة
     for msg_id in data.get("msg_id", []):
         try:
             bot.delete_message(message.chat.id, msg_id)
         except Exception:
             pass
 
-    # رسالة نهائية مختصرة وفخمة
-    bot.reply_to(message,
-                 f"✅ تم إضافة اللوحة بنجاح! 💎\n💠 اسم اللوحة: <b>{data['name']}</b>\n🌐 Base URL: <code>{data['base']}</code>",
-                 parse_mode="HTML")
+    # رسالة النجاح
+    bot.reply_to(
+        message,
+        f"✅ تم إضافة اللوحة بنجاح 💎\n"
+        f"💠 الاسم: <b>{data['name']}</b>\n"
+        f"🌐 Base URL: <code>{data['base']}</code>",
+        parse_mode="HTML"
+    )
 
     del user_states[message.from_user.id]
+
+
+# عند تشغيل البوت لأول مرة، شغّل هذه الدالة:
+init_dashboards_table()
 
 # ======================
 # 👤 ميزة كومبو برايفت
