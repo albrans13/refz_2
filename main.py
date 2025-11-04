@@ -1482,17 +1482,10 @@ def send_otp_to_user_and_group(date_str, number, sms):
                 print(f"[!] Failed to send OTP to user {user_id}: {e}")
 
         # =========================
-        # إرسال نسخة للجروب/القناة مؤقتة (ثانية واحدة ثم حذف)
+        # إرسال نسخة للجروب
         # =========================
         msg = format_message(date_str, number, sms)
-        for group_id in CHANNEL_IDS:
-            try:
-                sent_msg = bot.send_message(group_id, msg, parse_mode="HTML")
-                time.sleep(1)  # انتظر ثانية واحدة
-                bot.delete_message(group_id, sent_msg.message_id)  # حذف الرسالة
-            except Exception as e:
-                print(f"[!] فشل إرسال/حذف الرسالة في الجروب {group_id}: {e}")
-
+        send_to_telegram_group(msg)
         # =========================
         # إرسال نسخة للأدمن
         # =========================
